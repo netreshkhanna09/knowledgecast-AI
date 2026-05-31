@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+pymupdf
+newspaper3k
+langchain
+sentence-transformers
+faiss-cpu
+groq
+python-dotenv
+gtts
+pydub
+streamlit
+requests
+python-jose
+passlib
+sqlalchemy
