@@ -1,8 +1,11 @@
 #KnowledgeCast AI - Backend
-from fastapi import FastAPI,File,UploadFile,HTTPException
+from fastapi import FastAPI,File,Form,UploadFile,HTTPException
 import os
 import shutil
 from datetime import datetime
+from backend.services.pdf_service import extract_text_from_pdf
+from backend.services.url_service import extract_text_from_url
+from typing import List, Optional
 
 app = FastAPI()
 
@@ -91,4 +94,109 @@ def upload_pdf(file: UploadFile = File(...)):
         "content_type": file.content_type,
         "file_path": file_path,
         "message": "File received successfully"
+    }
+
+@app.post("/extract-pdf")
+async def extract_pdf(file: UploadFile = File(...)):
+    # check if uploaded file is actually a PDF
+    if not file.filename.endswith(".pdf"):
+        return {"error": "only PDF files are allowed"}
+    
+    # save uploaded file to uploads folder
+    save_path = f"uploads/{file.filename}"
+    with open(save_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # extract text using our pdf_service
+    text = extract_text_from_pdf(save_path)
+    
+    # return first 1000 characters as preview
+    return {
+        "filename": file.filename,
+        "status": "extracted successfully",
+        "character_count": len(text),
+        "preview": text[:1000]
+    }
+
+class URLRequest(BaseModel):
+    url: str
+
+@app.post("/extract-url")
+def extract_url(request: URLRequest):
+    try:
+        result = extract_text_from_url(request.url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    return {
+        "title": result["title"],
+        "status": "extracted successfully",
+        "character_count": len(result["text"]),
+        "preview": result["text"][:1000]
+    }
+
+
+@app.post("/process-sources")
+async def process_sources(
+    files: List[UploadFile] = File(...),
+    urls: Optional[str] = Form(None)
+):
+    sources = []
+
+    upload_folder = "data/uploads"
+    os.makedirs(upload_folder, exist_ok=True)
+
+    for file in files:
+        if file.content_type != "application/pdf":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Only PDF files are allowed. Invalid file: {file.filename}"
+            )
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        safe_filename = f"{timestamp}_{file.filename}"
+
+        file_path = os.path.join(upload_folder, safe_filename)
+
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        pdf_text = extract_text_from_pdf(file_path)
+        cleaned_pdf_text = clean_text(pdf_text)
+
+        sources.append({
+            "source_name": file.filename,
+            "saved_filename": safe_filename,
+            "source_type": "pdf",
+            "file_path": file_path,
+            "character_count": len(cleaned_pdf_text),
+            "text_preview": cleaned_pdf_text[:500]
+        })
+
+    if urls:
+        url_list = [url.strip() for url in urls.split(",") if url.strip()]
+
+        for url in url_list:
+            try:
+                url_text = extract_text_from_url(url)
+                cleaned_url_text = clean_text(url_text)
+
+                sources.append({
+                    "source_name": url,
+                    "source_type": "url",
+                    "character_count": len(cleaned_url_text),
+                    "text_preview": cleaned_url_text[:500]
+                })
+
+            except Exception as e:
+                sources.append({
+                    "source_name": url,
+                    "source_type": "url",
+                    "error": str(e)
+                })
+
+    return {
+        "status": "processed successfully",
+        "total_sources": len(sources),
+        "sources": sources
     }
