@@ -138,65 +138,80 @@ def extract_url(request: URLRequest):
 
 @app.post("/process-sources")
 async def process_sources(
-    files: List[UploadFile] = File(...),
-    urls: Optional[str] = Form(None)
+    files: List[UploadFile] = File(default=None),
+    urls_input: str = Form(default="")
 ):
+    if files is None:
+        files = []
     sources = []
+    failed_sources = []
 
-    upload_folder = "data/uploads"
-    os.makedirs(upload_folder, exist_ok=True)
-
+    # process PDF files
     for file in files:
-        if file.content_type != "application/pdf":
-            raise HTTPException(
-                status_code=400,
-                detail=f"Only PDF files are allowed. Invalid file: {file.filename}"
-            )
+        if not file.filename.endswith(".pdf"):
+            failed_sources.append({
+                "source": file.filename,
+                "error": "only PDF files are allowed"
+            })
+            continue
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        safe_filename = f"{timestamp}_{file.filename}"
-
-        file_path = os.path.join(upload_folder, safe_filename)
-
-        with open(file_path, "wb") as buffer:
+        save_path = f"uploads/{file.filename}"
+        with open(save_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        pdf_text = extract_text_from_pdf(file_path)
-        cleaned_pdf_text = clean_text(pdf_text)
+        try:
+            text = extract_text_from_pdf(save_path)
+            sources.append({
+                "source_name": file.filename,
+                "source_type": "pdf",
+                "character_count": len(text),
+                "text": text
+            })
+        except Exception as e:
+            failed_sources.append({
+                "source": file.filename,
+                "error": str(e)
+            })
 
-        sources.append({
-            "source_name": file.filename,
-            "saved_filename": safe_filename,
-            "source_type": "pdf",
-            "file_path": file_path,
-            "character_count": len(cleaned_pdf_text),
-            "text_preview": cleaned_pdf_text[:500]
-        })
+    # process URLs
+    if urls_input.strip():
+        urls = [url.strip() for url in urls_input.split(",")]
 
-    if urls:
-        url_list = [url.strip() for url in urls.split(",") if url.strip()]
-
-        for url in url_list:
+        for url in urls:
+            if not url:
+                continue
             try:
-                url_text = extract_text_from_url(url)
-                cleaned_url_text = clean_text(url_text)
-
+                result = extract_text_from_url(url)
                 sources.append({
                     "source_name": url,
                     "source_type": "url",
-                    "character_count": len(cleaned_url_text),
-                    "text_preview": cleaned_url_text[:500]
+                    "character_count": len(result["text"]),
+                    "text": result["text"]
                 })
-
             except Exception as e:
-                sources.append({
-                    "source_name": url,
-                    "source_type": "url",
+                failed_sources.append({
+                    "source": url,
                     "error": str(e)
                 })
 
+    # check if anything was processed at all
+    if not sources:
+        raise HTTPException(
+            status_code=400,
+            detail="No sources could be processed successfully."
+        )
+
     return {
-        "status": "processed successfully",
-        "total_sources": len(sources),
-        "sources": sources
+        "processed": len(sources),
+        "failed": len(failed_sources),
+        "sources": [
+            {
+                "source_name": s["source_name"],
+                "source_type": s["source_type"],
+                "character_count": s["character_count"]
+            }
+            for s in sources
+        ],
+        "failed_sources": failed_sources,
+        "status": "knowledge base ready"
     }
