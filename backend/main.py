@@ -7,6 +7,7 @@ from backend.services.pdf_service import extract_text_from_pdf
 from backend.services.url_service import extract_text_from_url
 from typing import List, Optional
 from backend.services.chunk_service import chunk_sources
+from backend.services.embedding_service import generate_embeddings
 
 app = FastAPI()
 
@@ -274,4 +275,31 @@ async def test_chunking(
         "average_chunk_length": sum(len(c["text"]) for c in chunks) // len(chunks),
         "sample_chunk": chunks[0],
         "sample_chunk_2": chunks[1] if len(chunks) > 1 else None
+    }
+
+@app.post("/test-embeddings")
+async def test_embeddings(file: UploadFile = File(...)):
+    # save file
+    save_path = f"uploads/{file.filename}"
+    with open(save_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # extract text
+    try:
+        text = extract_text_from_pdf(save_path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # chunk it
+    sources = [{"source_name": file.filename, "source_type": "pdf", "text": text}]
+    chunks = chunk_sources(sources)
+
+    # generate embeddings
+    embeddings = generate_embeddings(chunks)
+
+    return {
+        "total_chunks": len(chunks),
+        "embedding_shape": list(embeddings.shape),
+        "first_embedding_sample": embeddings[0][:10].tolist(),
+        "embedding_dimensions": embeddings.shape[1]
     }
