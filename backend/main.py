@@ -6,6 +6,7 @@ from datetime import datetime
 from backend.services.pdf_service import extract_text_from_pdf
 from backend.services.url_service import extract_text_from_url
 from typing import List, Optional
+from backend.services.chunk_service import chunk_sources
 
 app = FastAPI()
 
@@ -214,4 +215,63 @@ async def process_sources(
         ],
         "failed_sources": failed_sources,
         "status": "knowledge base ready"
+    }
+
+
+@app.post("/test-chunking")
+async def test_chunking(
+    files: List[UploadFile] = File(default=None),
+    urls_input: str = Form(default="")
+):
+    if files is None:
+        files = []
+
+    sources = []
+
+    # process PDFs
+    for file in files:
+        if not file.filename.endswith(".pdf"):
+            continue
+        save_path = f"uploads/{file.filename}"
+        with open(save_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        try:
+            text = extract_text_from_pdf(save_path)
+            sources.append({
+                "source_name": file.filename,
+                "source_type": "pdf",
+                "text": text
+            })
+        except Exception as e:
+            continue
+
+    # process URLs
+    if urls_input.strip():
+        urls = [url.strip() for url in urls_input.split(",")]
+        for url in urls:
+            if not url:
+                continue
+            try:
+                result = extract_text_from_url(url)
+                sources.append({
+                    "source_name": url,
+                    "source_type": "url",
+                    "text": result["text"]
+                })
+            except Exception as e:
+                continue
+
+    if not sources:
+        raise HTTPException(status_code=400, detail="No sources could be processed.")
+
+    # chunk all sources
+    chunks = chunk_sources(sources)
+
+    # return summary — not all chunks, just stats
+    return {
+        "total_sources": len(sources),
+        "total_chunks": len(chunks),
+        "average_chunk_length": sum(len(c["text"]) for c in chunks) // len(chunks),
+        "sample_chunk": chunks[0],
+        "sample_chunk_2": chunks[1] if len(chunks) > 1 else None
     }
