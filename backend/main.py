@@ -8,6 +8,7 @@ from backend.services.url_service import extract_text_from_url
 from typing import List, Optional
 from backend.services.chunk_service import chunk_sources
 from backend.services.embedding_service import generate_embeddings
+from backend.services.rag_service import build_knowledge_base, retrieve_context
 
 app = FastAPI()
 
@@ -302,4 +303,53 @@ async def test_embeddings(file: UploadFile = File(...)):
         "embedding_shape": list(embeddings.shape),
         "first_embedding_sample": embeddings[0][:10].tolist(),
         "embedding_dimensions": embeddings.shape[1]
+    }
+
+@app.post("/build-knowledge-base")
+async def build_kb(file: UploadFile = File(...)):
+    # save file
+    save_path = f"uploads/{file.filename}"
+    with open(save_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # extract text
+    try:
+        text = extract_text_from_pdf(save_path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # chunk
+    sources = [{"source_name": file.filename, "source_type": "pdf", "text": text}]
+    chunks = chunk_sources(sources)
+
+    # embed
+    embeddings = generate_embeddings(chunks)
+
+    # build FAISS index
+    result = build_knowledge_base(chunks, embeddings)
+
+    return {
+        "status": "knowledge base built successfully",
+        "total_chunks": result["total_vectors"],
+        "dimensions": result["dimensions"],
+        "index_saved_at": result["index_saved"],
+        "chunks_saved_at": result["chunks_saved"]
+    }
+
+
+class QueryRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+@app.post("/retrieve-context")
+def retrieve(request: QueryRequest):
+    try:
+        chunks = retrieve_context(request.query, request.top_k)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "query": request.query,
+        "top_k": request.top_k,
+        "results": chunks
     }
