@@ -9,6 +9,8 @@ from typing import List, Optional
 from backend.services.chunk_service import chunk_sources
 from backend.services.embedding_service import generate_embeddings
 from backend.services.rag_service import build_knowledge_base, retrieve_context
+from pydantic import BaseModel
+
 
 app = FastAPI()
 
@@ -21,7 +23,7 @@ def health_check():
     return {"status": "ok"}
 
 
-from pydantic import BaseModel
+
 
 class SummaryRequest(BaseModel):
      topic: str
@@ -146,10 +148,11 @@ async def process_sources(
 ):
     if files is None:
         files = []
+
     sources = []
     failed_sources = []
 
-    # process PDF files
+    # step 1 — extract text from PDFs
     for file in files:
         if not file.filename.endswith(".pdf"):
             failed_sources.append({
@@ -167,7 +170,6 @@ async def process_sources(
             sources.append({
                 "source_name": file.filename,
                 "source_type": "pdf",
-                "character_count": len(text),
                 "text": text
             })
         except Exception as e:
@@ -176,10 +178,9 @@ async def process_sources(
                 "error": str(e)
             })
 
-    # process URLs
+    # step 2 — extract text from URLs
     if urls_input.strip():
         urls = [url.strip() for url in urls_input.split(",")]
-
         for url in urls:
             if not url:
                 continue
@@ -188,7 +189,6 @@ async def process_sources(
                 sources.append({
                     "source_name": url,
                     "source_type": "url",
-                    "character_count": len(result["text"]),
                     "text": result["text"]
                 })
             except Exception as e:
@@ -197,26 +197,38 @@ async def process_sources(
                     "error": str(e)
                 })
 
-    # check if anything was processed at all
+    # check if anything succeeded
     if not sources:
         raise HTTPException(
             status_code=400,
             detail="No sources could be processed successfully."
         )
 
+    # step 3 — chunk all sources
+    try:
+        chunks = chunk_sources(sources)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chunking failed: {str(e)}")
+
+    # step 4 — generate embeddings
+    try:
+        embeddings = generate_embeddings(chunks)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Embedding failed: {str(e)}")
+
+    # step 5 — build FAISS index
+    try:
+        kb_result = build_knowledge_base(chunks, embeddings)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Index building failed: {str(e)}")
+
     return {
-        "processed": len(sources),
-        "failed": len(failed_sources),
-        "sources": [
-            {
-                "source_name": s["source_name"],
-                "source_type": s["source_type"],
-                "character_count": s["character_count"]
-            }
-            for s in sources
-        ],
-        "failed_sources": failed_sources,
-        "status": "knowledge base ready"
+        "status": "knowledge base ready",
+        "processed_sources": len(sources),
+        "failed_sources": len(failed_sources),
+        "total_chunks": kb_result["total_vectors"],
+        "embedding_dimensions": kb_result["dimensions"],
+        "failed_details": failed_sources
     }
 
 
@@ -352,4 +364,29 @@ def retrieve(request: QueryRequest):
         "query": request.query,
         "top_k": request.top_k,
         "results": chunks
+    }
+
+class QueryRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+@app.post("/ask")
+def ask(request: QueryRequest):
+    try:
+        chunks = retrieve_context(request.query, request.top_k)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # combine retrieved chunks into one context string
+    context = "\n\n".join([chunk["text"] for chunk in chunks])
+
+    # list unique sources used
+    sources_cited = list(set([chunk["source_name"] for chunk in chunks]))
+
+    return {
+        "query": request.query,
+        "context_used": context,
+        "sources_cited": sources_cited,
+        "chunks_retrieved": len(chunks),
+        "answer": "LLM integration coming day 12"
     }
