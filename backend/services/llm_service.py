@@ -80,3 +80,42 @@ Generate a structured summary with these sections:
     )
 
     return response.choices[0].message.content
+
+def generate_topic_summary(context: str, topic: str) -> str:
+    """
+    Generate a focused summary specifically about a given topic.
+    
+    Args:
+        context: retrieved chunks relevant to the topic
+        topic: the specific topic to summarize
+        
+    Returns:
+        focused summary as string
+    """
+    system_prompt = """You are a precise knowledge assistant.
+Your job is to generate focused summaries about specific topics.
+Only include information directly related to the requested topic.
+Do not add external knowledge. Base your answer only on the provided context."""
+
+    user_prompt = f"""Context:
+{context}
+
+Generate a focused summary specifically about: {topic}
+
+If the context contains limited information about this topic, clearly state that.
+Structure your summary as:
+1. Overview (2-3 sentences about {topic})
+2. Key Details (bullet points of specific facts)
+3. Source Coverage (how well the sources cover this topic)"""
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        temperature=0.3,
+        max_tokens=1000
+    )
+
+    return response.choices[0].message.content

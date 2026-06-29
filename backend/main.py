@@ -10,7 +10,7 @@ from backend.services.chunk_service import chunk_sources
 from backend.services.embedding_service import generate_embeddings
 from backend.services.rag_service import build_knowledge_base, retrieve_context
 from pydantic import BaseModel
-from backend.services.llm_service import generate_answer, generate_summary
+from backend.services.llm_service import generate_answer, generate_summary, generate_topic_summary
 
 app = FastAPI()
 
@@ -415,3 +415,45 @@ def generate_summary_endpoint(request: SummaryRequest):
         "summary": summary
     }
 
+class TopicSummaryRequest(BaseModel):
+    topic: str
+    top_k: int = 6
+
+@app.post("/topic-summary")
+def topic_summary(request: TopicSummaryRequest):
+    if not request.topic.strip():
+        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
+
+    # retrieve relevant chunks
+    try:
+        chunks = retrieve_context(request.topic, request.top_k)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # filter chunks below similarity threshold
+    relevant_chunks = [c for c in chunks if c["relevance_score"] > 0.3]
+
+    if not relevant_chunks:
+        return {
+            "topic": request.topic,
+            "summary": "No relevant content found for this topic in the uploaded sources.",
+            "sources_cited": [],
+            "chunks_used": 0
+        }
+
+    # combine relevant chunks into context
+    context = "\n\n".join([chunk["text"] for chunk in relevant_chunks])
+    sources_cited = list(set([chunk["source_name"] for chunk in relevant_chunks]))
+
+    # generate topic focused summary
+    try:
+        summary = generate_topic_summary(context, request.topic)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Summary generation failed: {str(e)}")
+
+    return {
+        "topic": request.topic,
+        "summary": summary,
+        "sources_cited": sources_cited,
+        "chunks_used": len(relevant_chunks)
+    }
