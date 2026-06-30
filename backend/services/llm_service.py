@@ -119,3 +119,64 @@ Structure your summary as:
     )
 
     return response.choices[0].message.content
+
+def generate_podcast_script(context: str, topic: str, duration: int) -> str:
+    """
+    Generate a two-host podcast script from retrieved context.
+
+    Args:
+        context: retrieved chunks relevant to the topic
+        topic: podcast topic
+        duration: podcast duration in minutes
+
+    Returns:
+        podcast script as string
+    """
+
+    # Approx word count for spoken podcast
+    word_count_map = {
+        2: 300,
+        5: 750,
+        10: 1500,
+        15: 2200
+    }
+
+    target_words = word_count_map.get(duration, 750)
+
+    system_prompt = """You are an expert educational podcast script writer.
+Your job is to convert technical content into a clear, engaging two-host podcast script.
+Use ONLY the provided context.
+Do not add external knowledge.
+Keep the tone conversational, simple, and useful for learners."""
+
+    user_prompt = f"""Context:
+{context}
+
+Create a two-host podcast script on the topic: {topic}
+
+Requirements:
+- Duration: approximately {duration} minutes
+- Target length: around {target_words} words
+- Use two hosts: Host A and Host B
+- Format every line like:
+  Host A: ...
+  Host B: ...
+- Start with a short intro
+- Explain the topic clearly
+- Include examples or analogies only if they are supported by the context
+- End with a short conclusion
+- Do not mention that you are using retrieved chunks or context
+
+Podcast Script:"""
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        temperature=0.7,
+        max_tokens=2500
+    )
+
+    return response.choices[0].message.content

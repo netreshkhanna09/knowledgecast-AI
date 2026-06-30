@@ -1,137 +1,44 @@
-#KnowledgeCast AI - Backend
-from fastapi import FastAPI,File,Form,UploadFile,HTTPException
 import os
 import shutil
-from datetime import datetime
+import json
+from typing import List
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from pydantic import BaseModel
 from backend.services.pdf_service import extract_text_from_pdf
 from backend.services.url_service import extract_text_from_url
-from typing import List, Optional
 from backend.services.chunk_service import chunk_sources
 from backend.services.embedding_service import generate_embeddings
 from backend.services.rag_service import build_knowledge_base, retrieve_context
-from pydantic import BaseModel
-from backend.services.llm_service import generate_answer, generate_summary, generate_topic_summary
+from backend.services.llm_service import generate_answer, generate_summary, generate_topic_summary, generate_podcast_script
 
-app = FastAPI()
+app = FastAPI(
+    title="KnowledgeCast AI",
+    description="RAG-powered knowledge synthesis platform that transforms PDFs and URLs into summaries, Q&A, and podcasts.",
+    version="1.0.0"
+)
 
-@app.get("/")
-def home():
-    return {"message": "KnowledgeCast AI is running"}
+# ─── helper function ────────────────────────────────────────
 
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
-
-
-
-
-
-
-
-
-@app.get("/About")
-def home():
-    return {"project": "KnowledgeCast AI"}
-
-
-
-class gr(BaseModel):
-    name:str
-
-@app.post("/generate_name")
-
-def generate_name(request:gr):
-    return {"message": f"Hello{request.name}"}
-
-from pydantic import BaseModel
-
-class ge(BaseModel):
-    topic:str
-
-@app.post("/topic_details")
-def topic_details(request:ge):
-    return {"received topic":request.topic}
-
-
-@app.get("/user/{user_id}")
-
-def get_id(user_id:int):
-    return{"user_id":user_id, "message":"user found"}
-
-@app.get("/search")
-def search_topic(topic: str, limit: int = 5):
-    return {"topic": topic, "limit": limit}
-    
-
-@app.post("/upload-pdf")
-def upload_pdf(file: UploadFile = File(...)):
-
-    if file.content_type != "application/pdf":
-        raise HTTPException(
-            status_code=400,
-            detail="Only PDF files are allowed"
-        )
-    
-    upload_folder = "data/uploads"
-    os.makedirs(upload_folder, exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_filename = f"{timestamp}_{file.filename}"
-
-    file_path = os.path.join(upload_folder, safe_filename)
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-     
-    return {
-        "original_filename": file.filename,
-        "saved_filename": safe_filename,
-        "content_type": file.content_type,
-        "file_path": file_path,
-        "message": "File received successfully"
-    }
-
-@app.post("/extract-pdf")
-async def extract_pdf(file: UploadFile = File(...)):
-    # check if uploaded file is actually a PDF
-    if not file.filename.endswith(".pdf"):
-        return {"error": "only PDF files are allowed"}
-    
-    # save uploaded file to uploads folder
+def save_upload_file(file: UploadFile) -> str:
+    """Save uploaded file to uploads folder and return file path."""
     save_path = f"uploads/{file.filename}"
     with open(save_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    
-    # extract text using our pdf_service
-    text = extract_text_from_pdf(save_path)
-    
-    # return first 1000 characters as preview
-    return {
-        "filename": file.filename,
-        "status": "extracted successfully",
-        "character_count": len(text),
-        "preview": text[:1000]
-    }
+    return save_path
 
-class URLRequest(BaseModel):
-    url: str
+# ─── health checks ──────────────────────────────────────────
 
-@app.post("/extract-url")
-def extract_url(request: URLRequest):
-    try:
-        result = extract_text_from_url(request.url)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    
-    return {
-        "title": result["title"],
-        "status": "extracted successfully",
-        "character_count": len(result["text"]),
-        "preview": result["text"][:1000]
-    }
+@app.get("/", summary="Root", description="Check if API is running.")
+def home():
+    return {"status": "ok", "message": "KnowledgeCast AI is running"}
 
+@app.get("/health", summary="Health Check", description="Verify all services are operational.")
+def health_check():
+    return {"status": "ok"}
 
-@app.post("/process-sources")
+# ─── ingestion pipeline ─────────────────────────────────────
+
+@app.post("/process-sources", summary="Process Sources", description="Upload PDFs and/or URLs. Extracts text, chunks, embeds, and builds FAISS knowledge base.")
 async def process_sources(
     files: List[UploadFile] = File(default=None),
     urls_input: str = Form(default="")
@@ -145,28 +52,14 @@ async def process_sources(
     # step 1 — extract text from PDFs
     for file in files:
         if not file.filename.endswith(".pdf"):
-            failed_sources.append({
-                "source": file.filename,
-                "error": "only PDF files are allowed"
-            })
+            failed_sources.append({"source": file.filename, "error": "only PDF files are allowed"})
             continue
-
-        save_path = f"uploads/{file.filename}"
-        with open(save_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
+        save_path = save_upload_file(file)
         try:
             text = extract_text_from_pdf(save_path)
-            sources.append({
-                "source_name": file.filename,
-                "source_type": "pdf",
-                "text": text
-            })
+            sources.append({"source_name": file.filename, "source_type": "pdf", "text": text})
         except Exception as e:
-            failed_sources.append({
-                "source": file.filename,
-                "error": str(e)
-            })
+            failed_sources.append({"source": file.filename, "error": str(e)})
 
     # step 2 — extract text from URLs
     if urls_input.strip():
@@ -176,31 +69,20 @@ async def process_sources(
                 continue
             try:
                 result = extract_text_from_url(url)
-                sources.append({
-                    "source_name": url,
-                    "source_type": "url",
-                    "text": result["text"]
-                })
+                sources.append({"source_name": url, "source_type": "url", "text": result["text"]})
             except Exception as e:
-                failed_sources.append({
-                    "source": url,
-                    "error": str(e)
-                })
+                failed_sources.append({"source": url, "error": str(e)})
 
-    # check if anything succeeded
     if not sources:
-        raise HTTPException(
-            status_code=400,
-            detail="No sources could be processed successfully."
-        )
+        raise HTTPException(status_code=400, detail="No sources could be processed successfully.")
 
-    # step 3 — chunk all sources
+    # step 3 — chunk
     try:
         chunks = chunk_sources(sources)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chunking failed: {str(e)}")
 
-    # step 4 — generate embeddings
+    # step 4 — embed
     try:
         embeddings = generate_embeddings(chunks)
     except Exception as e:
@@ -221,183 +103,46 @@ async def process_sources(
         "failed_details": failed_sources
     }
 
-
-@app.post("/test-chunking")
-async def test_chunking(
-    files: List[UploadFile] = File(default=None),
-    urls_input: str = Form(default="")
-):
-    if files is None:
-        files = []
-
-    sources = []
-
-    # process PDFs
-    for file in files:
-        if not file.filename.endswith(".pdf"):
-            continue
-        save_path = f"uploads/{file.filename}"
-        with open(save_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        try:
-            text = extract_text_from_pdf(save_path)
-            sources.append({
-                "source_name": file.filename,
-                "source_type": "pdf",
-                "text": text
-            })
-        except Exception as e:
-            continue
-
-    # process URLs
-    if urls_input.strip():
-        urls = [url.strip() for url in urls_input.split(",")]
-        for url in urls:
-            if not url:
-                continue
-            try:
-                result = extract_text_from_url(url)
-                sources.append({
-                    "source_name": url,
-                    "source_type": "url",
-                    "text": result["text"]
-                })
-            except Exception as e:
-                continue
-
-    if not sources:
-        raise HTTPException(status_code=400, detail="No sources could be processed.")
-
-    # chunk all sources
-    chunks = chunk_sources(sources)
-
-    # return summary — not all chunks, just stats
-    return {
-        "total_sources": len(sources),
-        "total_chunks": len(chunks),
-        "average_chunk_length": sum(len(c["text"]) for c in chunks) // len(chunks),
-        "sample_chunk": chunks[0],
-        "sample_chunk_2": chunks[1] if len(chunks) > 1 else None
-    }
-
-@app.post("/test-embeddings")
-async def test_embeddings(file: UploadFile = File(...)):
-    # save file
-    save_path = f"uploads/{file.filename}"
-    with open(save_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    # extract text
-    try:
-        text = extract_text_from_pdf(save_path)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # chunk it
-    sources = [{"source_name": file.filename, "source_type": "pdf", "text": text}]
-    chunks = chunk_sources(sources)
-
-    # generate embeddings
-    embeddings = generate_embeddings(chunks)
-
-    return {
-        "total_chunks": len(chunks),
-        "embedding_shape": list(embeddings.shape),
-        "first_embedding_sample": embeddings[0][:10].tolist(),
-        "embedding_dimensions": embeddings.shape[1]
-    }
-
-@app.post("/build-knowledge-base")
-async def build_kb(file: UploadFile = File(...)):
-    # save file
-    save_path = f"uploads/{file.filename}"
-    with open(save_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    # extract text
-    try:
-        text = extract_text_from_pdf(save_path)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # chunk
-    sources = [{"source_name": file.filename, "source_type": "pdf", "text": text}]
-    chunks = chunk_sources(sources)
-
-    # embed
-    embeddings = generate_embeddings(chunks)
-
-    # build FAISS index
-    result = build_knowledge_base(chunks, embeddings)
-
-    return {
-        "status": "knowledge base built successfully",
-        "total_chunks": result["total_vectors"],
-        "dimensions": result["dimensions"],
-        "index_saved_at": result["index_saved"],
-        "chunks_saved_at": result["chunks_saved"]
-    }
-
+# ─── Q&A ────────────────────────────────────────────────────
 
 class QueryRequest(BaseModel):
     query: str
     top_k: int = 5
 
-@app.post("/retrieve-context")
-def retrieve(request: QueryRequest):
-    try:
-        chunks = retrieve_context(request.query, request.top_k)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return {
-        "query": request.query,
-        "top_k": request.top_k,
-        "results": chunks
-    }
-
-class QueryRequest(BaseModel):
-    query: str
-    top_k: int = 5
-
-@app.post("/ask")
+@app.post("/ask", summary="Ask a Question", description="Retrieve relevant context from knowledge base and generate AI answer using Groq LLM.")
 def ask(request: QueryRequest):
     try:
         chunks = retrieve_context(request.query, request.top_k)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # combine retrieved chunks into one context string
     context = "\n\n".join([chunk["text"] for chunk in chunks])
-
-    # list unique sources used
     sources_cited = list(set([chunk["source_name"] for chunk in chunks]))
 
-    # call LLM with context and query
     try:
         answer = generate_answer(request.query, context)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM call failed: {str(e)}")
 
     return {
+        "status": "success",
         "query": request.query,
         "answer": answer,
         "sources_cited": sources_cited,
         "chunks_retrieved": len(chunks)
     }
 
+# ─── summaries ──────────────────────────────────────────────
+
 class SummaryRequest(BaseModel):
     topic: str = ""
 
-@app.post("/generate-summary")
+@app.post("/generate-summary", summary="Generate Summary", description="Generate executive summary of full knowledge base or a specific topic.")
 def generate_summary_endpoint(request: SummaryRequest):
-    # retrieve relevant context
     try:
         if request.topic.strip():
             chunks = retrieve_context(request.topic, top_k=8)
         else:
-            # if no topic, load all chunks
-            import json
             with open("vector_store/chunks.json", "r") as f:
                 chunks = json.load(f)
     except Exception as e:
@@ -411,49 +156,115 @@ def generate_summary_endpoint(request: SummaryRequest):
         raise HTTPException(status_code=500, detail=f"Summary generation failed: {str(e)}")
 
     return {
+        "status": "success",
         "topic": request.topic if request.topic else "full knowledge base",
         "summary": summary
     }
+
 
 class TopicSummaryRequest(BaseModel):
     topic: str
     top_k: int = 6
 
-@app.post("/topic-summary")
+@app.post("/topic-summary", summary="Topic Summary", description="Generate a focused summary about a specific topic from the knowledge base.")
 def topic_summary(request: TopicSummaryRequest):
     if not request.topic.strip():
         raise HTTPException(status_code=400, detail="Topic cannot be empty.")
 
-    # retrieve relevant chunks
     try:
         chunks = retrieve_context(request.topic, request.top_k)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # filter chunks below similarity threshold
     relevant_chunks = [c for c in chunks if c["relevance_score"] > 0.3]
 
     if not relevant_chunks:
         return {
+            "status": "success",
             "topic": request.topic,
             "summary": "No relevant content found for this topic in the uploaded sources.",
             "sources_cited": [],
             "chunks_used": 0
         }
 
-    # combine relevant chunks into context
     context = "\n\n".join([chunk["text"] for chunk in relevant_chunks])
     sources_cited = list(set([chunk["source_name"] for chunk in relevant_chunks]))
 
-    # generate topic focused summary
     try:
         summary = generate_topic_summary(context, request.topic)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Summary generation failed: {str(e)}")
 
     return {
+        "status": "success",
         "topic": request.topic,
         "summary": summary,
         "sources_cited": sources_cited,
         "chunks_used": len(relevant_chunks)
+    }
+
+class PodcastScriptRequest(BaseModel):
+    topic: str
+    duration: int = 5
+    top_k: int = 6
+
+@app.post(
+    "/generate-podcast-script",
+    summary="Generate Podcast Script",
+    description="Generate a two-host podcast script from retrieved knowledge base context."
+)
+def generate_podcast_script_endpoint(request: PodcastScriptRequest):
+
+    if not request.topic.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Topic cannot be empty."
+        )
+
+    if request.duration not in [2, 5, 10, 15]:
+        raise HTTPException(
+            status_code=400,
+            detail="Duration must be one of: 2, 5, 10, or 15 minutes."
+        )
+
+    try:
+        chunks = retrieve_context(request.topic, request.top_k)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+    if not chunks:
+        return {
+            "status": "success",
+            "topic": request.topic,
+            "duration": request.duration,
+            "podcast_script": "No relevant content found for this topic in the uploaded sources.",
+            "sources_cited": [],
+            "chunks_used": 0
+        }
+
+    context = "\n\n".join([chunk["text"] for chunk in chunks])
+    sources_cited = list(set([chunk["source_name"] for chunk in chunks]))
+
+    try:
+        podcast_script = generate_podcast_script(
+            context=context,
+            topic=request.topic,
+            duration=request.duration
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Podcast script generation failed: {str(e)}"
+        )
+
+    return {
+        "status": "success",
+        "topic": request.topic,
+        "duration": request.duration,
+        "podcast_script": podcast_script,
+        "sources_cited": sources_cited,
+        "chunks_used": len(chunks)
     }
