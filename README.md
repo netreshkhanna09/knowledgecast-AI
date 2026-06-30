@@ -50,7 +50,7 @@ uvicorn backend.main:app --reload
 
 Add your Groq API key to `.env`:
 ```
-GROQ_API_KEY=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
+GROQ_API_KEY=your_key_here
 ```
 
 ## Project Status
