@@ -120,54 +120,38 @@ Structure your summary as:
 
     return response.choices[0].message.content
 
-def generate_podcast_script(context: str, topic: str, duration: int) -> str:
-    """
-    Generate a two-host podcast script from retrieved context.
+def generate_podcast_script(context: str, topic: str, duration: int = 5) -> str:
+    word_count = duration * 130
 
-    Args:
-        context: retrieved chunks relevant to the topic
-        topic: podcast topic
-        duration: podcast duration in minutes
+    system_prompt = """You are a professional podcast script writer.
+STRICT RULES — follow exactly:
+1. Only Alex and Sam speak. No guests ever.
+2. Every line starts with EITHER "Alex:" OR "Sam:" — never "Sam: Alex:" or any other format
+3. Only use information from the provided context. Zero external knowledge.
+4. If topic is not in context, Alex says the topic isn't covered and both wrap up in 3 lines maximum.
+5. Never repeat the other host's name at the start of your line."""
+    user_prompt = f"""Write a podcast script for "KnowledgeCast".
 
-    Returns:
-        podcast script as string
-    """
+Host 1: ALEX — asks sharp questions, challenges ideas, keeps conversation moving.
+Host 2: SAM — explains clearly, uses examples from the context, gives depth.
 
-    # Approx word count for spoken podcast
-    word_count_map = {
-        2: 300,
-        5: 750,
-        10: 1500,
-        15: 2200
-    }
+CRITICAL RULES:
+- There are NO guests. ONLY Alex and Sam speak. Never introduce a third person.
+- Every single line MUST start with exactly "Alex:" or "Sam:" — no exceptions, no bold, no asterisks
+- Only discuss information found in the provided context
+- If context is not relevant to the topic, hosts should say so honestly
+- Natural conversation — reactions, follow-ups, moments of clarity
+- Target length: {word_count} words ({duration} minutes)
+- Match tone to content type — not always educational
+- Start with hosts introducing the topic
+- End with key takeaways between Alex and Sam only
 
-    target_words = word_count_map.get(duration, 750)
-
-    system_prompt = """You are an expert educational podcast script writer.
-Your job is to convert technical content into a clear, engaging two-host podcast script.
-Use ONLY the provided context.
-Do not add external knowledge.
-Keep the tone conversational, simple, and useful for learners."""
-
-    user_prompt = f"""Context:
+Context:
 {context}
 
-Create a two-host podcast script on the topic: {topic}
+Topic to discuss: {topic}
 
-Requirements:
-- Duration: approximately {duration} minutes
-- Target length: around {target_words} words
-- Use two hosts: Host A and Host B
-- Format every line like:
-  Host A: ...
-  Host B: ...
-- Start with a short intro
-- Explain the topic clearly
-- Include examples or analogies only if they are supported by the context
-- End with a short conclusion
-- Do not mention that you are using retrieved chunks or context
-
-Podcast Script:"""
+Script:"""
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -176,7 +160,7 @@ Podcast Script:"""
             {"role": "user", "content": user_prompt}
         ],
         temperature=0.7,
-        max_tokens=2500
+        max_tokens=2000
     )
 
     return response.choices[0].message.content

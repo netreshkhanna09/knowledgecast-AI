@@ -203,68 +203,49 @@ def topic_summary(request: TopicSummaryRequest):
         "chunks_used": len(relevant_chunks)
     }
 
-class PodcastScriptRequest(BaseModel):
+class PodcastRequest(BaseModel):
     topic: str
     duration: int = 5
     top_k: int = 6
 
-@app.post(
-    "/generate-podcast-script",
-    summary="Generate Podcast Script",
-    description="Generate a two-host podcast script from retrieved knowledge base context."
-)
-def generate_podcast_script_endpoint(request: PodcastScriptRequest):
-
+@app.post("/generate-podcast-script", summary="Generate Podcast Script", description="Generate a two-host conversational podcast script on a topic from your knowledge base.")
+def generate_podcast_script_endpoint(request: PodcastRequest):
     if not request.topic.strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Topic cannot be empty."
-        )
-
-    if request.duration not in [2, 5, 10, 15]:
-        raise HTTPException(
-            status_code=400,
-            detail="Duration must be one of: 2, 5, 10, or 15 minutes."
-        )
+        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
 
     try:
         chunks = retrieve_context(request.topic, request.top_k)
     except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # get best score from retrieved chunks
+    best_score = max(c["relevance_score"] for c in chunks)
+
+# only reject if even the best chunk is clearly irrelevant
+    if best_score < 0.25:
         raise HTTPException(
-            status_code=400,
-            detail=str(e)
-        )
+        status_code=400,
+        detail="This topic is not covered in your uploaded sources."
+    )
 
-    if not chunks:
-        return {
-            "status": "success",
-            "topic": request.topic,
-            "duration": request.duration,
-            "podcast_script": "No relevant content found for this topic in the uploaded sources.",
-            "sources_cited": [],
-            "chunks_used": 0
-        }
+# use all chunks — let the LLM decide what's relevant
+    relevant_chunks = chunks
 
-    context = "\n\n".join([chunk["text"] for chunk in chunks])
-    sources_cited = list(set([chunk["source_name"] for chunk in chunks]))
+# use all chunks — let the LLM decide what's relevant
+    relevant_chunks = chunks
+    context = "\n\n".join([chunk["text"] for chunk in relevant_chunks])
+    sources_cited = list(set([chunk["source_name"] for chunk in relevant_chunks]))
 
     try:
-        podcast_script = generate_podcast_script(
-            context=context,
-            topic=request.topic,
-            duration=request.duration
-        )
+        script = generate_podcast_script(context, request.topic, request.duration)
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Podcast script generation failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Script generation failed: {str(e)}")
 
     return {
-        "status": "success",
-        "topic": request.topic,
-        "duration": request.duration,
-        "podcast_script": podcast_script,
-        "sources_cited": sources_cited,
-        "chunks_used": len(chunks)
-    }
+    "status": "success",
+    "topic": request.topic,
+    "duration_minutes": request.duration,
+    "sources_cited": sources_cited,
+    "disclaimer": "Content generated based on uploaded sources. Verify accuracy for topics not explicitly covered.",
+    "script": script
+}
