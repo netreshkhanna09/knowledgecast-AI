@@ -9,7 +9,7 @@ from backend.services.url_service import extract_text_from_url
 from backend.services.chunk_service import chunk_sources
 from backend.services.embedding_service import generate_embeddings
 from backend.services.rag_service import build_knowledge_base, retrieve_context
-from backend.services.llm_service import generate_answer, generate_summary, generate_topic_summary, generate_podcast_script
+from backend.services.llm_service import generate_answer, generate_summary, generate_topic_summary, generate_podcast_script,generate_audiobook_script
 
 app = FastAPI(
     title="KnowledgeCast AI",
@@ -249,3 +249,36 @@ def generate_podcast_script_endpoint(request: PodcastRequest):
     "disclaimer": "Content generated based on uploaded sources. Verify accuracy for topics not explicitly covered.",
     "script": script
 }
+
+
+class AudiobookRequest(BaseModel):
+    topic: str
+    duration: int = 5
+    top_k: int = 6
+
+@app.post("/generate-audiobook-script", summary="Generate Audiobook Script", description="Generate a single-narrator audiobook script on a topic from your knowledge base.")
+def generate_audiobook_script_endpoint(request: AudiobookRequest):
+    if not request.topic.strip():
+        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
+
+    try:
+        chunks = retrieve_context(request.topic, request.top_k)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    context = "\n\n".join([chunk["text"] for chunk in chunks])
+    sources_cited = list(set([chunk["source_name"] for chunk in chunks]))
+
+    try:
+        script = generate_audiobook_script(context, request.topic, request.duration)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Audiobook generation failed: {str(e)}")
+
+    return {
+        "status": "success",
+        "topic": request.topic,
+        "duration_minutes": request.duration,
+        "sources_cited": sources_cited,
+        "disclaimer": "Content generated based on uploaded sources.",
+        "script": script
+    }

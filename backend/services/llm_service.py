@@ -164,3 +164,53 @@ Script:"""
     )
 
     return response.choices[0].message.content
+
+def generate_audiobook_script(context: str, topic: str, duration: int = 5) -> str:
+    """
+    Generate a single-narrator audiobook script from retrieved context.
+    
+    Args:
+        context: retrieved chunks as combined string
+        topic: the topic to focus on
+        duration: target duration in minutes
+        
+    Returns:
+        audiobook script as continuous narration string
+    """
+    word_count = duration * 130
+
+    system_prompt = """You are a professional audiobook narrator and writer.
+You write clear, engaging, structured narration — like a BBC documentary.
+Single narrator only. No dialogue. No hosts. Pure flowing prose.
+Only use information from the provided context. Zero external knowledge.
+If topic is not in context, write one sentence saying so and stop."""
+
+    user_prompt = f"""Write an audiobook narration for "KnowledgeCast".
+
+Style: Professional narrator — clear, engaging, structured, flows naturally when read aloud.
+Target length: {word_count} words ({duration} minutes at 130 words/minute)
+Only use information from the provided context.
+
+Structure:
+- Opening: introduce the topic naturally
+- Body: explore key points with smooth transitions
+- Closing: summarize main insights
+
+Context:
+{context}
+
+Topic: {topic}
+
+Narration:"""
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        temperature=0.4,
+        max_tokens=2000
+    )
+
+    return response.choices[0].message.content
