@@ -10,6 +10,8 @@ from backend.services.chunk_service import chunk_sources
 from backend.services.embedding_service import generate_embeddings
 from backend.services.rag_service import build_knowledge_base, retrieve_context
 from backend.services.llm_service import generate_answer, generate_summary, generate_topic_summary, generate_podcast_script,generate_audiobook_script
+from fastapi.responses import FileResponse
+from backend.services.audio_service import generate_audiobook_audio, generate_podcast_audio_gtts, generate_podcast_audio_elevenlabs
 
 app = FastAPI(
     title="KnowledgeCast AI",
@@ -282,3 +284,57 @@ def generate_audiobook_script_endpoint(request: AudiobookRequest):
         "disclaimer": "Content generated based on uploaded sources.",
         "script": script
     }
+
+
+class AudioRequest(BaseModel):
+    script: str
+    filename_prefix: str = "output"
+
+@app.post("/generate-audiobook-audio", summary="Generate Audiobook Audio", description="Convert audiobook script to MP3 using gTTS.")
+def audiobook_audio(request: AudioRequest):
+    try:
+        file_path = generate_audiobook_audio(request.script, request.filename_prefix)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Audio generation failed: {str(e)}")
+    
+    return {
+        "status": "success",
+        "file_path": file_path,
+        "message": "Audio generated successfully"
+    }
+
+
+@app.post("/generate-podcast-audio-gtts", summary="Generate Podcast Audio (gTTS)", description="Convert podcast script to two-voice MP3 using gTTS.")
+def podcast_audio_gtts(request: AudioRequest):
+    try:
+        file_path = generate_podcast_audio_gtts(request.script, request.filename_prefix)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Audio generation failed: {str(e)}")
+    
+    return {
+        "status": "success",
+        "file_path": file_path,
+        "message": "Podcast audio generated successfully"
+    }
+
+
+@app.post("/generate-podcast-audio-elevenlabs", summary="Generate Podcast Audio (ElevenLabs)", description="Convert podcast script to two genuinely different voices using ElevenLabs.")
+def podcast_audio_elevenlabs(request: AudioRequest):
+    try:
+        file_path = generate_podcast_audio_elevenlabs(request.script, request.filename_prefix)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Audio generation failed: {str(e)}")
+    
+    return {
+        "status": "success", 
+        "file_path": file_path,
+        "message": "ElevenLabs podcast audio generated successfully"
+    }
+
+
+@app.get("/download-audio/{filename}", summary="Download Audio File")
+def download_audio(filename: str):
+    file_path = f"audio/{filename}"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Audio file not found.")
+    return FileResponse(file_path, media_type="audio/mpeg", filename=filename)
