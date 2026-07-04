@@ -397,3 +397,56 @@ def generate_full_podcast(request: PodcastFullRequest):
         "download_url": f"/download-audio/{filename}",
         "sources_cited": sources_cited
     }
+
+class AudiobookFullRequest(BaseModel):
+    topic: str
+    duration: int = 5
+    top_k: int = 6
+
+@app.post("/generate-audiobook", summary="Generate Full Audiobook", description="One endpoint — retrieves context, generates narration script, converts to audio. Returns script + audio file.")
+def generate_full_audiobook(request: AudiobookFullRequest):
+    if not request.topic.strip():
+        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
+
+    # step 1 — retrieve context
+    try:
+        chunks = retrieve_context(request.topic, request.top_k)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    context = "\n\n".join([chunk["text"] for chunk in chunks])
+    sources_cited = list(set([chunk["source_name"] for chunk in chunks]))
+
+    # step 2 — generate audiobook script
+    try:
+        script = generate_audiobook_script(context, request.topic, request.duration)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Script generation failed: {str(e)}")
+
+    # step 3 — generate audio
+    try:
+        audio_path = generate_audiobook_audio(script, "audiobook")
+    except Exception as e:
+        # audio failed but script succeeded — return script anyway
+        return {
+            "status": "partial_success",
+            "topic": request.topic,
+            "duration_minutes": request.duration,
+            "script": script,
+            "audio_file": None,
+            "download_url": None,
+            "sources_cited": sources_cited,
+            "warning": f"Script generated but audio failed: {str(e)}"
+        }
+
+    filename = os.path.basename(audio_path)
+
+    return {
+        "status": "success",
+        "topic": request.topic,
+        "duration_minutes": request.duration,
+        "script": script,
+        "audio_file": audio_path,
+        "download_url": f"/download-audio/{filename}",
+        "sources_cited": sources_cited
+    }
