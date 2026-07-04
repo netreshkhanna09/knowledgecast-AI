@@ -338,3 +338,62 @@ def download_audio(filename: str):
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Audio file not found.")
     return FileResponse(file_path, media_type="audio/mpeg", filename=filename)
+
+
+class PodcastFullRequest(BaseModel):
+    topic: str
+    duration: int = 5
+    top_k: int = 6
+    use_elevenlabs: bool = False
+
+@app.post("/generate-podcast", summary="Generate Full Podcast", description="One endpoint — retrieves context, generates script, converts to audio. Returns script + audio file.")
+def generate_full_podcast(request: PodcastFullRequest):
+    if not request.topic.strip():
+        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
+
+    # step 1 — retrieve context
+    try:
+        chunks = retrieve_context(request.topic, request.top_k)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    context = "\n\n".join([chunk["text"] for chunk in chunks])
+    sources_cited = list(set([chunk["source_name"] for chunk in chunks]))
+
+    # step 2 — generate script
+    try:
+        script = generate_podcast_script(context, request.topic, request.duration)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Script generation failed: {str(e)}")
+
+    # step 3 — generate audio
+    try:
+        if request.use_elevenlabs:
+            audio_path = generate_podcast_audio_elevenlabs(script, "podcast")
+        else:
+            audio_path = generate_podcast_audio_gtts(script, "podcast")
+    except Exception as e:
+        # audio failed but script succeeded — return script anyway
+        return {
+            "status": "partial_success",
+            "topic": request.topic,
+            "duration_minutes": request.duration,
+            "script": script,
+            "audio_file": None,
+            "download_url": None,
+            "sources_cited": sources_cited,
+            "warning": f"Script generated but audio failed: {str(e)}"
+        }
+
+    # extract just the filename from path
+    filename = os.path.basename(audio_path)
+
+    return {
+        "status": "success",
+        "topic": request.topic,
+        "duration_minutes": request.duration,
+        "script": script,
+        "audio_file": audio_path,
+        "download_url": f"/download-audio/{filename}",
+        "sources_cited": sources_cited
+    }
