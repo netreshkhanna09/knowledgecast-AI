@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from backend.services.audio_service import generate_audiobook_audio, generate_podcast_audio_gtts, generate_podcast_audio_elevenlabs
 from fastapi.responses import StreamingResponse
 import time
+from backend.services.database_service import save_generation, get_all_generations, get_generation_by_id, delete_generation
 
 app = FastAPI(
     title="KnowledgeCast AI",
@@ -127,7 +128,13 @@ def ask(request: QueryRequest):
         answer = generate_answer(request.query, context)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM call failed: {str(e)}")
-
+    
+    save_generation(
+        output_type="qa",
+        content=answer,
+        topic=request.query,
+        sources=sources_cited
+    )
     return {
         "status": "success",
         "query": request.query,
@@ -159,6 +166,12 @@ def generate_summary_endpoint(request: SummaryRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Summary generation failed: {str(e)}")
 
+    save_generation(
+        output_type="summary",
+        content=summary,
+        topic=request.topic if request.topic else "full knowledge base",
+        sources=None
+    )
     return {
         "status": "success",
         "topic": request.topic if request.topic else "full knowledge base",
@@ -198,7 +211,13 @@ def topic_summary(request: TopicSummaryRequest):
         summary = generate_topic_summary(context, request.topic)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Summary generation failed: {str(e)}")
-
+    
+    save_generation(
+        output_type="topic_summary",
+        content=summary,
+        topic=request.topic,
+        sources=sources_cited
+    )
     return {
         "status": "success",
         "topic": request.topic,
@@ -389,7 +408,14 @@ def generate_full_podcast(request: PodcastFullRequest):
 
     # extract just the filename from path
     filename = os.path.basename(audio_path)
-
+    save_generation(
+        output_type="podcast",
+        content=script,
+        topic=request.topic,
+        sources=sources_cited,
+        audio_path=audio_path,
+        duration=request.duration
+    )
     return {
         "status": "success",
         "topic": request.topic,
@@ -442,7 +468,15 @@ def generate_full_audiobook(request: AudiobookFullRequest):
         }
 
     filename = os.path.basename(audio_path)
-
+    
+    save_generation(
+        output_type="audiobook",
+        content=script,
+        topic=request.topic,
+        sources=sources_cited,
+        audio_path=audio_path,
+        duration=request.duration
+    )
     return {
         "status": "success",
         "topic": request.topic,
@@ -578,3 +612,22 @@ def generate_audiobook_stream(request: AudiobookFullRequest):
             yield f"data: ERROR:Unexpected error — {str(e)}\n\n"
 
     return StreamingResponse(stream(), media_type="text/event-stream")
+
+@app.get("/history", summary="Get Generation History")
+def get_history():
+    records = get_all_generations()
+    return {"status": "success", "count": len(records), "records": records}
+
+@app.get("/history/{record_id}", summary="Get Single Generation")
+def get_single(record_id: int):
+    record = get_generation_by_id(record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found.")
+    return {"status": "success", "record": record}
+
+@app.delete("/history/{record_id}", summary="Delete Generation")
+def delete_record(record_id: int):
+    deleted = delete_generation(record_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Record not found.")
+    return {"status": "success", "message": f"Record {record_id} deleted."}
