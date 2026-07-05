@@ -12,6 +12,8 @@ from backend.services.rag_service import build_knowledge_base, retrieve_context
 from backend.services.llm_service import generate_answer, generate_summary, generate_topic_summary, generate_podcast_script,generate_audiobook_script
 from fastapi.responses import FileResponse
 from backend.services.audio_service import generate_audiobook_audio, generate_podcast_audio_gtts, generate_podcast_audio_elevenlabs
+from fastapi.responses import StreamingResponse
+import time
 
 app = FastAPI(
     title="KnowledgeCast AI",
@@ -450,3 +452,129 @@ def generate_full_audiobook(request: AudiobookFullRequest):
         "download_url": f"/download-audio/{filename}",
         "sources_cited": sources_cited
     }
+
+
+@app.post("/generate-podcast-stream", summary="Generate Podcast with Progress", description="Same as generate-podcast but streams progress updates via SSE.")
+def generate_podcast_stream(request: PodcastFullRequest):
+    if not request.topic.strip():
+        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
+
+    def stream():
+        try:
+            yield "data: 🔍 Retrieving relevant content...\n\n"
+            time.sleep(0.1)
+
+            try:
+                chunks = retrieve_context(request.topic, request.top_k)
+            except ValueError as e:
+                yield f"data: ERROR:{str(e)}\n\n"
+                return
+
+            context = "\n\n".join([chunk["text"] for chunk in chunks])
+            sources_cited = list(set([chunk["source_name"] for chunk in chunks]))
+
+            yield f"data: ✅ Found {len(chunks)} relevant chunks from {len(sources_cited)} source(s)\n\n"
+            time.sleep(0.1)
+
+            yield "data: ✍️ Generating podcast script...\n\n"
+            time.sleep(0.1)
+
+            try:
+                script = generate_podcast_script(context, request.topic, request.duration)
+            except Exception as e:
+                yield f"data: ERROR:Script generation failed — {str(e)}\n\n"
+                return
+
+            word_count = len(script.split())
+            yield f"data: ✅ Script ready — {word_count} words\n\n"
+            time.sleep(0.1)
+
+            yield "data: 🎙️ Converting to audio...\n\n"
+            time.sleep(0.1)
+
+            try:
+                if request.use_elevenlabs:
+                    audio_path = generate_podcast_audio_elevenlabs(script, "podcast")
+                else:
+                    audio_path = generate_podcast_audio_gtts(script, "podcast")
+            except Exception as e:
+                yield f"data: ERROR:Audio generation failed — {str(e)}\n\n"
+                return
+
+            filename = os.path.basename(audio_path)
+            import json as json_module
+            result = json_module.dumps({
+                "script": script,
+                "download_url": f"/download-audio/{filename}",
+                "sources_cited": sources_cited,
+                "duration_minutes": request.duration
+            })
+            yield f"data: ✅ Audio ready!\n\n"
+            time.sleep(0.1)
+            yield f"data: RESULT:{result}\n\n"
+
+        except Exception as e:
+            yield f"data: ERROR:Unexpected error — {str(e)}\n\n"
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+@app.post("/generate-audiobook-stream", summary="Generate Audiobook with Progress", description="Same as generate-audiobook but streams progress updates via SSE.")
+def generate_audiobook_stream(request: AudiobookFullRequest):
+    if not request.topic.strip():
+        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
+
+    def stream():
+        try:
+            yield "data: 🔍 Retrieving relevant content...\n\n"
+            time.sleep(0.1)
+
+            try:
+                chunks = retrieve_context(request.topic, request.top_k)
+            except ValueError as e:
+                yield f"data: ERROR:{str(e)}\n\n"
+                return
+
+            context = "\n\n".join([chunk["text"] for chunk in chunks])
+            sources_cited = list(set([chunk["source_name"] for chunk in chunks]))
+
+            yield f"data: ✅ Found {len(chunks)} relevant chunks from {len(sources_cited)} source(s)\n\n"
+            time.sleep(0.1)
+
+            yield "data: ✍️ Generating audiobook narration...\n\n"
+            time.sleep(0.1)
+
+            try:
+                script = generate_audiobook_script(context, request.topic, request.duration)
+            except Exception as e:
+                yield f"data: ERROR:Script generation failed — {str(e)}\n\n"
+                return
+
+            word_count = len(script.split())
+            yield f"data: ✅ Narration ready — {word_count} words\n\n"
+            time.sleep(0.1)
+
+            yield "data: 🎧 Converting to audio...\n\n"
+            time.sleep(0.1)
+
+            try:
+                audio_path = generate_audiobook_audio(script, "audiobook")
+            except Exception as e:
+                yield f"data: ERROR:Audio generation failed — {str(e)}\n\n"
+                return
+
+            filename = os.path.basename(audio_path)
+            import json as json_module
+            result = json_module.dumps({
+                "script": script,
+                "download_url": f"/download-audio/{filename}",
+                "sources_cited": sources_cited,
+                "duration_minutes": request.duration
+            })
+            yield "data: ✅ Audio ready!\n\n"
+            time.sleep(0.1)
+            yield f"data: RESULT:{result}\n\n"
+
+        except Exception as e:
+            yield f"data: ERROR:Unexpected error — {str(e)}\n\n"
+
+    return StreamingResponse(stream(), media_type="text/event-stream")

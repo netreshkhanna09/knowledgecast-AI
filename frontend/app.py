@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import os
+import json
 
 # ─── configuration ──────────────────────────────────────────
 
@@ -186,24 +187,55 @@ with tab1:
         elif not pod_topic.strip():
             st.error("Please enter a topic.")
         else:
-            with st.spinner(f"Generating {pod_duration} min podcast..."):
-                response = call_api(
-                    "post", "/generate-podcast",
-                    json={"topic": pod_topic, "duration": pod_duration, "top_k": 6, "use_elevenlabs": False},
-                    timeout=180
-                )
-                if response and response.status_code == 200:
-                    data = response.json()
-                    st.success("✅ Podcast generated!")
-                    with st.expander("📝 View Script"):
-                        st.text(data["script"])
-                    if data.get("download_url"):
-                        st.subheader("🔊 Listen")
-                        play_audio(data["download_url"])
-                        st.markdown(f"[⬇️ Download MP3]({API_BASE}{data['download_url']})")
-                    st.caption(f"Sources: {', '.join(data['sources_cited'])}")
-                elif response:
-                    st.error(response.json().get("detail", "Generation failed"))
+            status_box = st.empty()
+            result_container = st.container()
+
+            try:
+                with requests.post(
+                    f"{API_BASE}/generate-podcast-stream",
+                    json={
+                        "topic": pod_topic,
+                        "duration": pod_duration,
+                        "top_k": 6,
+                        "use_elevenlabs": False
+                    },
+                    stream=True,
+                    timeout=300
+                ) as response:
+
+                    final_result = None
+
+                    for line in response.iter_lines():
+                        if not line:
+                            continue
+                        decoded = line.decode("utf-8")
+                        if not decoded.startswith("data: "):
+                            continue
+                        message = decoded[6:]  # strip "data: " prefix
+
+                        if message.startswith("ERROR:"):
+                            status_box.error(message[6:])
+                            break
+                        elif message.startswith("RESULT:"):
+                            final_result = json.loads(message[7:])
+                            status_box.success("✅ Podcast ready!")
+                        else:
+                            status_box.info(message)
+
+                    if final_result:
+                        with result_container:
+                            with st.expander("📝 View Script"):
+                                st.text(final_result["script"])
+                            if final_result.get("download_url"):
+                                st.subheader("🔊 Listen")
+                                play_audio(final_result["download_url"])
+                                st.markdown(f"[⬇️ Download MP3]({API_BASE}{final_result['download_url']})")
+                            st.caption(f"Sources: {', '.join(final_result['sources_cited'])}")
+
+            except requests.exceptions.Timeout:
+                status_box.error("Request timed out. Try a shorter duration.")
+            except Exception as e:
+                status_box.error(f"Connection error: {str(e)}")
 
 with tab2:
     audio_topic = st.text_input("Audiobook topic", placeholder="chapter summary, key concepts", key="audio_topic")
@@ -215,25 +247,54 @@ with tab2:
         elif not audio_topic.strip():
             st.error("Please enter a topic.")
         else:
-            with st.spinner(f"Generating {audio_duration} min audiobook..."):
-                response = call_api(
-                    "post", "/generate-audiobook",
-                    json={"topic": audio_topic, "duration": audio_duration, "top_k": 6},
-                    timeout=180
-                )
-                if response and response.status_code == 200:
-                    data = response.json()
-                    st.success("✅ Audiobook generated!")
-                    with st.expander("📝 View Script"):
-                        st.text(data["script"])
-                    if data.get("download_url"):
-                        st.subheader("🔊 Listen")
-                        play_audio(data["download_url"])
-                        st.markdown(f"[⬇️ Download MP3]({API_BASE}{data['download_url']})")
-                    st.caption(f"Sources: {', '.join(data['sources_cited'])}")
-                elif response:
-                    st.error(response.json().get("detail", "Generation failed"))
+            status_box = st.empty()
+            result_container = st.container()
 
+            try:
+                with requests.post(
+                    f"{API_BASE}/generate-audiobook-stream",
+                    json={
+                        "topic": audio_topic,
+                        "duration": audio_duration,
+                        "top_k": 6
+                    },
+                    stream=True,
+                    timeout=300
+                ) as response:
+
+                    final_result = None
+
+                    for line in response.iter_lines():
+                        if not line:
+                            continue
+                        decoded = line.decode("utf-8")
+                        if not decoded.startswith("data: "):
+                            continue
+                        message = decoded[6:]
+
+                        if message.startswith("ERROR:"):
+                            status_box.error(message[6:])
+                            break
+                        elif message.startswith("RESULT:"):
+                            final_result = json.loads(message[7:])
+                            status_box.success("✅ Audiobook ready!")
+                        else:
+                            status_box.info(message)
+
+                    if final_result:
+                        with result_container:
+                            with st.expander("📝 View Script"):
+                                st.text(final_result["script"])
+                            if final_result.get("download_url"):
+                                st.subheader("🔊 Listen")
+                                play_audio(final_result["download_url"])
+                                st.markdown(f"[⬇️ Download MP3]({API_BASE}{final_result['download_url']})")
+                            st.caption(f"Sources: {', '.join(final_result['sources_cited'])}")
+
+            except requests.exceptions.Timeout:
+                status_box.error("Request timed out. Try a shorter duration.")
+            except Exception as e:
+                status_box.error(f"Connection error: {str(e)}")
 st.divider()
 
 # ─── section 4: summaries ───────────────────────────────────
@@ -276,3 +337,4 @@ with sum_tab2:
 
 st.divider()
 st.caption("KnowledgeCast AI — RAG-powered knowledge synthesis platform")
+
