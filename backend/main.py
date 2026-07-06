@@ -15,11 +15,19 @@ from backend.services.audio_service import generate_audiobook_audio, generate_po
 from fastapi.responses import StreamingResponse
 import time
 from backend.services.database_service import save_generation, get_all_generations, get_generation_by_id, delete_generation
+from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="KnowledgeCast AI",
     description="RAG-powered knowledge synthesis platform that transforms PDFs and URLs into summaries, Q&A, and podcasts.",
     version="1.0.0"
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"]
 )
 
 # ─── helper function ────────────────────────────────────────
