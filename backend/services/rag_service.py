@@ -5,7 +5,7 @@ import faiss
 import numpy as np
 import json
 import os
-from backend.services.embedding_service import model
+from backend.services.embedding_service import get_model
 
 # paths where we save index and chunks
 INDEX_PATH = "vector_store/index.faiss"
@@ -73,7 +73,7 @@ def retrieve_context(query: str, top_k: int = 5) -> list:
         chunks = json.load(f)
 
     # convert query to embedding vector
-    query_embedding = model.encode([query])
+    query_embedding = get_model().encode([query])
     query_embedding = query_embedding.astype(np.float32)
 
     # search FAISS index

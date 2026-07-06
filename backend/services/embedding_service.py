@@ -4,9 +4,16 @@
 from sentence_transformers import SentenceTransformer
 import numpy as np
 
-# load model once at module level — not inside the function
-# this runs once when the file is first imported
-model = SentenceTransformer("all-MiniLM-L6-v2")
+# lazy loading — model loads on first use, not at server startup
+# this prevents out-of-memory errors on deployment (Render free tier = 512MB)
+_model = None
+
+def get_model():
+    """Load and cache the model. Only loads once, reuses on subsequent calls."""
+    global _model
+    if _model is None:
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _model
 
 def generate_embeddings(chunks: list) -> np.ndarray:
     """
@@ -22,6 +29,7 @@ def generate_embeddings(chunks: list) -> np.ndarray:
     texts = [chunk["text"] for chunk in chunks]
     
     # generate embeddings for all texts at once
-    embeddings = model.encode(texts, show_progress_bar=True)
+    # show_progress_bar=False for production — no terminal output needed
+    embeddings = get_model().encode(texts, show_progress_bar=False)
     
     return embeddings
