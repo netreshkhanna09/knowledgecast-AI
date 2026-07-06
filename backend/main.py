@@ -536,6 +536,16 @@ def generate_podcast_stream(request: PodcastFullRequest):
                 return
 
             filename = os.path.basename(audio_path)
+
+            save_generation(
+                output_type="podcast",
+                content=script,
+                topic=request.topic,
+                sources=sources_cited,
+                audio_path=audio_path,
+                duration=request.duration
+            )
+
             import json as json_module
             result = json_module.dumps({
                 "script": script,
@@ -543,7 +553,7 @@ def generate_podcast_stream(request: PodcastFullRequest):
                 "sources_cited": sources_cited,
                 "duration_minutes": request.duration
             })
-            yield f"data: ✅ Audio ready!\n\n"
+            yield "data: ✅ Audio ready!\n\n"
             time.sleep(0.1)
             yield f"data: RESULT:{result}\n\n"
 
@@ -597,6 +607,16 @@ def generate_audiobook_stream(request: AudiobookFullRequest):
                 return
 
             filename = os.path.basename(audio_path)
+
+            save_generation(
+                output_type="audiobook",
+                content=script,
+                topic=request.topic,
+                sources=sources_cited,
+                audio_path=audio_path,
+                duration=request.duration
+            )
+
             import json as json_module
             result = json_module.dumps({
                 "script": script,

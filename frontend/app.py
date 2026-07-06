@@ -338,3 +338,76 @@ with sum_tab2:
 st.divider()
 st.caption("KnowledgeCast AI — RAG-powered knowledge synthesis platform")
 
+st.divider()
+
+# ─── section 5: history ─────────────────────────────────────
+
+st.header("🕓 Generation History")
+
+# type filter
+filter_type = st.selectbox(
+    "Filter by type",
+    ["All", "podcast", "audiobook", "summary", "topic_summary", "qa"],
+    key="history_filter"
+)
+
+col_refresh, col_clear = st.columns([1, 5])
+with col_refresh:
+    refresh = st.button("🔄 Refresh", key="refresh_history")
+
+if st.button("📜 Load History", type="primary", key="load_history") or refresh:
+    response = call_api("get", "/history", timeout=10)
+
+    if response and response.status_code == 200:
+        data = response.json()
+        records = data["records"]
+
+        # apply filter
+        if filter_type != "All":
+            records = [r for r in records if r["output_type"] == filter_type]
+
+        if not records:
+            st.info("No history found. Generate something first.")
+        else:
+            st.success(f"Found {len(records)} record(s)")
+
+            for record in records:
+                # build a readable label for each record
+                type_emoji = {
+                    "podcast": "🎙️",
+                    "audiobook": "📖",
+                    "summary": "📄",
+                    "topic_summary": "🎯",
+                    "qa": "💬"
+                }.get(record["output_type"], "📝")
+
+                label = f"{type_emoji} {record['output_type'].upper()} — {record['topic'] or 'no topic'} — {record['created_at']}"
+
+                with st.expander(label):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.caption(f"**Type:** {record['output_type']}")
+                        st.caption(f"**Topic:** {record['topic'] or '—'}")
+                    with col2:
+                        st.caption(f"**Sources:** {record['sources'] or '—'}")
+                        st.caption(f"**Duration:** {str(record['duration']) + ' min' if record['duration'] else '—'}")
+
+                    st.markdown("**Generated Content:**")
+                    st.write(record["content"])
+
+                    # replay audio if available
+                    if record.get("audio_path"):
+                        filename = os.path.basename(record["audio_path"])
+                        st.subheader("🔊 Replay Audio")
+                        play_audio(f"/download-audio/{filename}")
+                        st.markdown(f"[⬇️ Download MP3]({API_BASE}/download-audio/{filename})")
+
+                    # delete button
+                    if st.button(f"🗑️ Delete", key=f"delete_{record['id']}"):
+                        del_response = call_api("delete", f"/history/{record['id']}", timeout=10)
+                        if del_response and del_response.status_code == 200:
+                            st.success("Deleted. Click Refresh to update.")
+                        else:
+                            st.error("Could not delete.")
+    elif response:
+        st.error(response.json().get("detail", "Failed to load history"))
