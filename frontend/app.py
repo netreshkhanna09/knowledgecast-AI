@@ -5,7 +5,7 @@ import json
 
 # ─── configuration ──────────────────────────────────────────
 
-API_BASE = "http://localhost:8000"
+API_BASE = "https://netreshkhanna09-knowledgecast-ai.hf.space"
 
 st.set_page_config(
     page_title="KnowledgeCast AI",
