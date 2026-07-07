@@ -1,3 +1,12 @@
+---
+title: KnowledgeCast AI
+emoji: 🎙️
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
 # KnowledgeCast AI
 
 A RAG-powered knowledge synthesis platform that transforms PDFs, research papers, documentation, and web articles into AI-generated summaries and Q&A experiences.

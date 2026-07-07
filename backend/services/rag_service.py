@@ -8,8 +8,8 @@ import os
 from backend.services.embedding_service import get_model
 
 # paths where we save index and chunks
-INDEX_PATH = "vector_store/index.faiss"
-CHUNKS_PATH = "vector_store/chunks.json"
+INDEX_PATH = "/tmp/index.faiss"
+CHUNKS_PATH = "/tmp/chunks.json"
 
 
 def build_knowledge_base(chunks: list, embeddings: np.ndarray) -> dict:

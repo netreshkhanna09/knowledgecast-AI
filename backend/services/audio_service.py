@@ -26,8 +26,8 @@ def generate_audiobook_audio(script: str, filename_prefix: str = "audiobook") ->
         path to generated MP3 file
     """
     timestamp = int(time.time())
-    output_path = f"audio/{filename_prefix}_{timestamp}.mp3"
-    temp_path = f"audio/temp_audiobook_{timestamp}.mp3"
+    output_path = f"/tmp/{filename_prefix}_{timestamp}.mp3"
+    temp_path = f"/tmp/temp_{timestamp}.mp3"
 
     tts = gTTS(text=script, lang="en", slow=False)
     tts.save(temp_path)
@@ -55,8 +55,8 @@ def generate_podcast_audio_gtts(script: str, filename_prefix: str = "podcast") -
         path to generated MP3 file
     """
     timestamp = int(time.time())
-    output_path = f"audio/{filename_prefix}_{timestamp}.mp3"
-    temp_files = []
+    output_path = f"/tmp/{filename_prefix}_{timestamp}.mp3"
+    temp_path = f"/tmp/temp_{timestamp}.mp3"
 
     # parse script into lines
     lines = []
@@ -123,8 +123,8 @@ def generate_podcast_audio_elevenlabs(script: str, filename_prefix: str = "podca
     client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
 
     timestamp = int(time.time())
-    output_path = f"audio/{filename_prefix}_elevenlabs_{timestamp}.mp3"
-    temp_files = []
+    output_path = f"/tmp/{filename_prefix}_{timestamp}.mp3"
+    temp_path = f"/tmp/temp_{timestamp}.mp3"
 
     # parse script
     lines = []

@@ -34,7 +34,7 @@ app.add_middleware(
 
 def save_upload_file(file: UploadFile) -> str:
     """Save uploaded file to uploads folder and return file path."""
-    save_path = f"uploads/{file.filename}"
+    save_path = f"/tmp/{file.filename}"
     with open(save_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     return save_path
@@ -363,7 +363,7 @@ def podcast_audio_elevenlabs(request: AudioRequest):
 
 @app.get("/download-audio/{filename}", summary="Download Audio File")
 def download_audio(filename: str):
-    file_path = f"audio/{filename}"
+    file_path = f"/tmp/{filename}"
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Audio file not found.")
     return FileResponse(file_path, media_type="audio/mpeg", filename=filename)
