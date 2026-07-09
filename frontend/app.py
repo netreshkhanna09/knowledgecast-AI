@@ -41,7 +41,7 @@ def normalize_urls(url_text: str) -> str:
 def check_backend() -> bool:
     """Check if FastAPI backend is running."""
     try:
-        response = requests.get(f"{API_BASE}/health", timeout=3)
+        response = requests.get(f"{API_BASE}/health", timeout=30)
         return response.status_code == 200
     except:
         return False
@@ -59,10 +59,10 @@ def play_audio(download_url: str):
 
 # ─── backend check ───────────────────────────────────────────
 
-if not check_backend():
-    st.error("⚠️ Backend not running. Start FastAPI with:")
-    st.code("uvicorn backend.main:app --reload")
-    st.stop()
+with st.spinner("Connecting to backend... (may take 30-60 seconds on first load)"):
+    if not check_backend():
+        st.error("⚠️ Backend not responding. Please try refreshing the page in 30 seconds.")
+        st.stop()
 
 # ─── session state ───────────────────────────────────────────
 
