@@ -309,7 +309,7 @@ with sum_tab1:
             st.error("Please process sources first.")
         else:
             with st.spinner("Generating summary..."):
-                response = call_api("post", "/generate-summary", json={"topic": ""}, timeout=60)
+                response = call_api("post", "/generate-summary", json={"topic": ""}, timeout=120)
                 if response and response.status_code == 200:
                     data = response.json()
                     st.subheader("Summary")
