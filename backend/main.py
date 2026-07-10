@@ -162,8 +162,12 @@ def generate_summary_endpoint(request: SummaryRequest):
         if request.topic.strip():
             chunks = retrieve_context(request.topic, top_k=8)
         else:
-            with open("vector_store/chunks.json", "r") as f:
+            if not os.path.exists("/tmp/chunks.json"):
+                raise HTTPException(status_code=400, detail="No knowledge base found. Please upload sources first.")
+            with open("/tmp/chunks.json", "r") as f:
                 chunks = json.load(f)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
