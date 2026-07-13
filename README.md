@@ -1,257 +1,237 @@
+---
+title: KnowledgeCast AI
+emoji: 🎙️
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
+<div align="center">
+
 # 🎙️ KnowledgeCast AI
 
-> **A RAG-powered knowledge synthesis platform that transforms  blogs, articles, url, PDFs, research papers into podcasts, audiobooks, smart summaries, and Q&A experiences.**
+### From any PDF, URL, blog, or article — to a podcast, audiobook, summary, or Q&A session.
+
+Drop in your sources. KnowledgeCast AI builds a semantic knowledge base, retrieves what's relevant, and generates content you can actually consume — a two-host podcast, a narrated audiobook, a structured summary, or direct answers to your questions. All grounded in your documents through RAG. No hallucination. No guessing. Every generation is saved to history so you can replay audio and revisit content anytime. Real-time progress streaming via SSE keeps you informed at every step — no frozen spinners, no waiting in the dark.
+
+<br/>
+
+[![Live App](https://img.shields.io/badge/Live%20App-Streamlit-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://knowledgecast-ai-cj9njr2werp5ob5ngfpjpq.streamlit.app)
+&nbsp;
+[![API Docs](https://img.shields.io/badge/API%20Docs-Swagger-85EA2D?style=flat-square&logo=swagger&logoColor=black)](https://netreshkhanna09-knowledgecast-ai.hf.space/docs)
+&nbsp;
+[![GitHub](https://img.shields.io/badge/GitHub-Source-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/netreshkhanna09/knowledgecast-AI)
+
+</div>
 
 ---
 
-## 🌐 Live Demo
+## The Problem
 
-| | Link |
-|---|---|
-| 🖥️ **Frontend (Streamlit)** | [knowledgecast-ai.streamlit.app](https://knowledgecast-ai-cj9njr2werp5ob5ngfpjpq.streamlit.app) |
-| ⚙️ **Backend API (FastAPI Docs)** | [netreshkhanna09-knowledgecast-ai.hf.space/docs](https://netreshkhanna09-knowledgecast-ai.hf.space/docs) |
+Reading 10 research papers, 5 blog posts, and 3 documentation PDFs to extract specific knowledge takes hours. Most of that time is spent on content that isn't relevant to what you actually need.
 
----
+KnowledgeCast AI fixes this. Upload your sources once. The platform builds a unified, searchable knowledge base and lets you consume that knowledge in whichever format works best for you — a focused answer, a structured summary, a podcast you can listen to while commuting, or a narrated audiobook.
 
-## 📌 What is KnowledgeCast AI
-
-Most people struggle to extract useful knowledge from large volumes of documents. Reading through 10 research papers, 5 blog posts, and 3 documentation PDFs to find answers takes hours.
-
-KnowledgeCast AI solves this. Upload any combination of PDFs and URLs — research papers, company reports, blog articles, technical documentation, legal documents, anything — and the platform builds a unified AI-powered knowledge base that lets you:
-
-- Get instant answers to specific questions grounded in your documents
-- Generate executive summaries of everything you uploaded
-- Summarize any specific topic across all your sources
-- Convert your knowledge base into a fully produced two-host podcast with audio
-- Convert your knowledge base into a narrated audiobook with audio
-- Revisit everything you generated through a built-in history system
+It works on any content — research papers, company reports, legal documents, technical documentation, news articles, blog posts, anything.
 
 ---
 
-## ✨ Features
+## What You Can Do With It
 
-### 📥 Multi-Source Ingestion
-- Upload multiple PDFs simultaneously
-- Add multiple article/blog URLs
-- Mix PDFs and URLs in a single knowledge base
-- Partial success handling — one bad source doesn't fail everything
-- Source metadata preserved throughout the pipeline
+**Ask questions** — type any question and get an answer grounded strictly in your uploaded documents, with source citations.
 
-### 🔍 RAG-Powered Q&A
-- Ask any question about your uploaded content
-- Answers grounded strictly in your documents — no hallucination
-- Source citations with every answer
-- Configurable context depth (3–10 chunks)
+**Generate summaries** — get a structured executive summary of your entire knowledge base, or focus on a specific topic.
 
-### 📄 Smart Summarization
-- Full knowledge base executive summary
-- Topic-specific summaries with semantic retrieval
-- Structured output — executive summary, key insights, main takeaways
-- Similarity threshold filtering to prevent off-topic generation
+**Create podcasts** — generate a two-host conversational podcast on any topic from your sources, with full MP3 audio output.
 
-### 🎙️ AI Podcast Generation
-- Two-host conversational format (Alex + Sam)
-- User-defined duration — 2, 5, 10, or 15 minutes
-- Topic-focused generation from your knowledge base
-- Full MP3 audio output, playable directly in browser
-- Real-time progress streaming via SSE
+**Create audiobooks** — generate a single-narrator educational audiobook with MP3 audio output.
 
-### 📖 AI Audiobook Generation
-- Single-narrator educational format
-- User-defined duration — 2, 5, 10, or 15 minutes
-- Topic-focused narration from your knowledge base
-- Full MP3 audio output, playable directly in browser
-- Real-time progress streaming via SSE
-
-### 🕓 Generation History
-- Every generation saved automatically to SQLite
-- Filter by type — podcast, audiobook, summary, Q&A
-- Replay audio from past generations
-- Delete individual records
-
-### 📡 Real-Time Progress Tracking
-- Live SSE streaming for long operations
-- Stage-by-stage updates — Retrieving → Scripting → Audio → Done
-- No frozen spinners — users always know what's happening
+**Review history** — every generation is saved. Replay audio, re-read content, delete old records — all from a built-in history panel.
 
 ---
 
-## 🛠️ Tech Stack
+## How It Works
 
-| Layer | Technology | Purpose |
+The core architecture is RAG — Retrieval-Augmented Generation. Instead of sending entire documents to an LLM (which won't fit and causes hallucination), the system finds only the most relevant pieces first, then generates from those.
+
+```
+━━━━━━━━━━━━━━━━━━━  INGESTION  ━━━━━━━━━━━━━━━━━━━
+                    (runs once)
+
+  PDFs + URLs
+       │
+       ▼
+  Text Extraction
+  PyMuPDF for PDFs · newspaper3k for URLs
+       │
+       ▼
+  Chunking
+  700 tokens · 100 token overlap · recursive splitting
+       │
+       ▼
+  Embedding
+  all-MiniLM-L6-v2 · 384 dimensions per chunk
+       │
+       ▼
+  FAISS Index
+  stored on disk · ready for search
+
+
+━━━━━━━━━━━━━━━━━━━  RETRIEVAL  ━━━━━━━━━━━━━━━━━━━
+                  (runs per request)
+
+  User Query / Topic
+       │
+       ▼
+  Query → Embedding Vector
+       │
+       ▼
+  FAISS Similarity Search
+  top-K chunks · relevance score filtering
+       │
+       ▼
+  Groq · Llama 3.3 70B
+  context-grounded generation
+       │
+       ▼
+  Answer · Summary · Script
+       │
+       ▼  (audio outputs only)
+  gTTS · MP3
+```
+
+**Why not just send everything to the LLM?**
+
+A research paper is typically 80,000–150,000 characters. Llama 3's context window handles roughly 8,000 tokens. The document simply doesn't fit. Even if it did, output quality degrades significantly when the context is too large — the LLM gets confused by irrelevant content. RAG retrieves only the 5–8 most semantically relevant chunks for any given query, keeping context focused and output accurate.
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Why |
 |---|---|---|
-| **Backend** | FastAPI + Python | REST API, endpoint routing |
-| **Frontend** | Streamlit | User interface |
-| **PDF Extraction** | PyMuPDF | Text extraction from digital PDFs |
-| **URL Extraction** | newspaper3k | Clean article text from web URLs |
-| **Text Chunking** | LangChain RecursiveCharacterTextSplitter | Split text into overlapping chunks |
-| **Embeddings** | Sentence Transformers (all-MiniLM-L6-v2) | Convert text to 384-dim vectors |
-| **Vector Store** | FAISS | Fast semantic similarity search |
-| **LLM** | Groq API + Llama 3.3 70B | Content generation, Q&A, summaries |
-| **Text-to-Speech** | gTTS | MP3 audio generation |
-| **Database** | SQLite + SQLAlchemy | Generation history storage |
-| **Real-Time** | Server-Sent Events (SSE) | Live progress streaming |
-| **Deployment** | Hugging Face Spaces (Docker) + Streamlit Cloud | Backend + Frontend hosting |
+| Backend API | FastAPI | Fast, async, automatic Swagger docs |
+| PDF Extraction | PyMuPDF | Reliable, handles multi-page PDFs efficiently |
+| URL Extraction | newspaper3k | Strips nav/ads, extracts article body cleanly |
+| Chunking | LangChain RecursiveCharacterTextSplitter | Tries paragraph → sentence → word splits in order |
+| Embeddings | sentence-transformers all-MiniLM-L6-v2 | Free, local, 384-dim vectors, strong semantic quality |
+| Vector Store | FAISS IndexFlatL2 | No server required, saves to disk in 2 lines, exact search |
+| LLM | Groq API + Llama 3.3 70B | Free tier, fast LPU inference, follows prompts reliably |
+| Audio | gTTS + pydub | Free, unlimited, no API cost |
+| Database | SQLite + SQLAlchemy | Zero setup, file-based, right for single-user demo |
+| Progress | Server-Sent Events (SSE) | One-direction streaming, simpler than WebSockets |
+| Frontend | Streamlit | Full UI in pure Python |
+| Deployment | Hugging Face Spaces (Docker) + Streamlit Cloud | Free hosting for backend and frontend |
 
 ---
 
-## 🧠 How RAG Works in This Project
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     INGESTION PIPELINE                       │
-│                                                             │
-│  PDFs + URLs                                                │
-│      ↓                                                      │
-│  Text Extraction (PyMuPDF / newspaper3k)                    │
-│      ↓                                                      │
-│  Text Cleaning                                              │
-│      ↓                                                      │
-│  Chunking (700 tokens, 100 overlap)                         │
-│      ↓                                                      │
-│  Embedding Generation (all-MiniLM-L6-v2 → 384 dimensions)  │
-│      ↓                                                      │
-│  FAISS Index Built + Saved to Disk                          │
-└─────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│                     RETRIEVAL PIPELINE                       │
-│                                                             │
-│  User Query / Topic                                         │
-│      ↓                                                      │
-│  Query → Embedding Vector                                   │
-│      ↓                                                      │
-│  FAISS Similarity Search → Top-K Relevant Chunks            │
-│      ↓                                                      │
-│  Similarity Threshold Filter (score > 0.3)                  │
-│      ↓                                                      │
-│  Context Assembly                                           │
-│      ↓                                                      │
-│  Groq LLM (Llama 3.3 70B) → Generated Output               │
-│      ↓                                                      │
-│  Summary / Answer / Podcast Script / Audiobook Script       │
-│      ↓  (for audio outputs)                                 │
-│  gTTS → MP3 Audio File                                      │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Why RAG and not just an LLM?**
-
-- LLMs have a context window limit (~8000 tokens). A 50-page PDF is ~150,000 characters — it simply won't fit.
-- RAG retrieves only the most relevant 5–8 chunks (~1500 words) for any given query, fitting perfectly within the context window.
-- RAG prevents hallucination — the LLM only answers from your actual documents, not from general training knowledge.
-- RAG enables topic-focused generation — "generate a podcast about the attention mechanism" finds only attention-related chunks across all your sources and generates from those specifically.
-
----
-
-## 📡 API Endpoints
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/` | Health check |
-| GET | `/health` | Service status |
-| POST | `/process-sources` | Upload PDFs + URLs, run full ingestion pipeline |
-| POST | `/ask` | Q&A with source citations |
-| POST | `/generate-summary` | Full knowledge base summary |
-| POST | `/topic-summary` | Topic-focused summary |
-| POST | `/generate-podcast-script` | Podcast script only |
-| POST | `/generate-podcast` | Full podcast — script + MP3 |
-| POST | `/generate-podcast-stream` | Full podcast with SSE progress |
-| POST | `/generate-audiobook-script` | Audiobook script only |
-| POST | `/generate-audiobook` | Full audiobook — script + MP3 |
-| POST | `/generate-audiobook-stream` | Full audiobook with SSE progress |
-| GET | `/download-audio/{filename}` | Download generated MP3 |
-| GET | `/history` | Fetch all past generations |
-| GET | `/history/{id}` | Fetch single generation |
-| DELETE | `/history/{id}` | Delete a generation record |
-
----
-
-## 🚀 Run Locally
-
-### Prerequisites
-- Python 3.11+
-- Groq API key (free at [console.groq.com](https://console.groq.com))
-
-### Setup
-
-```bash
-# clone the repo
-git clone https://github.com/netreshkhanna09/knowledgecast-AI
-cd knowledgecast-AI
-
-# create virtual environment
-python -m venv venv
-venv\Scripts\activate        # Windows
-source venv/bin/activate     # Mac/Linux
-
-# install dependencies
-pip install -r requirements.txt
-
-# create .env file
-echo GROQ_API_KEY=your_key_here > .env
-```
-
-### Run Backend
-
-```bash
-uvicorn backend.main:app --reload
-```
-
-API runs at `http://localhost:8000`
-Interactive docs at `http://localhost:8000/docs`
-
-### Run Frontend
-
-```bash
-streamlit run frontend/app.py
-```
-
-Frontend runs at `http://localhost:8501`
-
----
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 knowledgecast-AI/
+│
 ├── backend/
-│   ├── main.py                    ← FastAPI app, all endpoints
+│   ├── main.py                  ← FastAPI app · all endpoints · orchestration
 │   └── services/
-│       ├── pdf_service.py         ← PyMuPDF text extraction
-│       ├── url_service.py         ← newspaper3k URL extraction
-│       ├── chunk_service.py       ← LangChain text chunking
-│       ├── embedding_service.py   ← Sentence Transformers embeddings
-│       ├── rag_service.py         ← FAISS build + retrieval
-│       ├── llm_service.py         ← Groq LLM calls + prompt engineering
-│       ├── audio_service.py       ← gTTS audio generation
-│       └── database_service.py    ← SQLite history (SQLAlchemy)
+│       ├── pdf_service.py       ← PyMuPDF extraction · scanned PDF detection
+│       ├── url_service.py       ← newspaper3k · URL validation · error handling
+│       ├── chunk_service.py     ← RecursiveCharacterTextSplitter · metadata
+│       ├── embedding_service.py ← Lazy-loaded sentence-transformers · batch encoding
+│       ├── rag_service.py       ← FAISS build + retrieval · similarity scoring
+│       ├── llm_service.py       ← Groq prompts · Q&A · summary · podcast · audiobook
+│       ├── audio_service.py     ← gTTS · pydub · two-voice podcast · MP3 output
+│       └── database_service.py  ← SQLAlchemy ORM · history · CRUD
+│
 ├── frontend/
-│   └── app.py                     ← Streamlit UI
-├── uploads/                       ← Uploaded PDFs (temp)
-├── audio/                         ← Generated MP3 files (temp)
-├── vector_store/                  ← FAISS index + chunks JSON (temp)
-├── .env                           ← API keys (never committed)
-├── .gitignore
+│   └── app.py                   ← Streamlit UI · SSE streaming · audio playback
+│
+├── Dockerfile                   ← HuggingFace Spaces container config
 ├── requirements.txt
-├── Procfile                       ← Render deployment config
+├── .env                         ← API keys · never committed
 └── README.md
 ```
 
 ---
 
-## ⚠️ Known Limitations
+## API Reference
 
-**Ephemeral Storage** — The free deployment tier uses ephemeral storage. Uploaded files, the FAISS index, and generated audio are wiped on server restart. Users need to re-upload sources each session. This is a free-tier infrastructure constraint, not a design limitation — in a production deployment with persistent storage (S3, GCS, or a paid server), this would not be an issue.
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Service health check |
+| `POST` | `/process-sources` | Upload PDFs + URLs · run full ingestion pipeline |
+| `POST` | `/ask` | Q&A with source citations |
+| `POST` | `/generate-summary` | Executive summary of full knowledge base |
+| `POST` | `/topic-summary` | Focused summary on a specific topic |
+| `POST` | `/generate-podcast` | Full podcast pipeline · script + MP3 |
+| `POST` | `/generate-podcast-stream` | Same with live SSE progress updates |
+| `POST` | `/generate-audiobook` | Full audiobook pipeline · script + MP3 |
+| `POST` | `/generate-audiobook-stream` | Same with live SSE progress updates |
+| `GET` | `/download-audio/{filename}` | Serve generated MP3 |
+| `GET` | `/history` | All past generations |
+| `DELETE` | `/history/{id}` | Delete a record |
 
-**Scanned PDFs** — PyMuPDF can only extract text from digital PDFs (created from Word, Google Docs, etc.). Scanned document PDFs (photos of physical pages) require OCR, which is not implemented in V1.
-
-**Free Tier Spin-Down** — The Hugging Face Space may take 30–60 seconds to wake up after inactivity. This is normal free-tier behaviour.
+Full interactive documentation at the [live API](https://netreshkhanna09-knowledgecast-ai.hf.space/docs).
 
 ---
 
+## Run Locally
 
-## 👨‍💻 Author
+**Requirements** — Python 3.11+, ffmpeg, a free [Groq API key](https://console.groq.com)
 
-**Netresh Khanna**
-[GitHub](https://github.com/netreshkhanna09) · [LinkedIn](https://linkedin.com/in/netreshkhanna09)
+```bash
+git clone https://github.com/netreshkhanna09/knowledgecast-AI
+cd knowledgecast-AI
+
+python -m venv venv
+venv\Scripts\activate        # Windows
+source venv/bin/activate     # Mac/Linux
+
+pip install -r requirements.txt
+
+echo "GROQ_API_KEY=your_key_here" > .env
+
+# start backend
+uvicorn backend.main:app --reload
+
+# start frontend (separate terminal)
+streamlit run frontend/app.py
+```
+
+Backend → `http://localhost:8000/docs`
+Frontend → `http://localhost:8501`
+
+---
+
+## Design Decisions
+
+**Lazy model loading** — importing sentence-transformers loads PyTorch which consumes ~400MB of RAM immediately. On a 512MB free-tier server, loading at startup crashes the process before handling a single request. The model is imported and loaded on first use instead, letting the server start cleanly.
+
+**Chunk overlap** — without overlap, a sentence split across two chunk boundaries loses context in both. A 100-token overlap means the last 100 tokens of every chunk repeat at the start of the next, making each chunk self-contained and semantically complete.
+
+**Relevance threshold filtering** — FAISS always returns top-K results regardless of how relevant they actually are. Without a minimum similarity score, a query about a topic not covered in the documents would still retrieve chunks and the LLM would hallucinate. A threshold of 0.3 stops this — if nothing is close enough, the system says so honestly instead of making something up.
+
+**Partial success on multi-source ingestion** — if a user uploads 4 PDFs and one URL and the URL fails, the system processes the 4 PDFs and reports the failure clearly. Rejecting the entire request because of one bad source would be a poor experience.
+
+**SSE over WebSockets for progress** — podcast and audiobook generation takes 60–90 seconds. Server-Sent Events stream one-way from server to client — simpler than WebSockets, works over standard HTTP, and exactly right for this use case since the client only needs to receive updates, never send them.
+
+---
+
+## Known Limitations
+
+**Ephemeral storage** — the free deployment tier does not persist files between server restarts. Uploaded PDFs, the FAISS index, and generated audio are cleared on restart. Users need to re-upload sources each session. In a production deployment with persistent storage this would not be an issue.
+
+**Scanned PDFs** — V1 supports digital PDFs only. Scanned documents contain images rather than text and require OCR. OCR support is planned for V2.
+
+**Free tier cold starts** — the Hugging Face Space may take 30–60 seconds to respond after inactivity. Standard free-tier behaviour.
+
+---
+
+<div align="center">
+
+Built by **Netresh Khanna** · B.Tech CS (AI), BIT Mesra
+
+[LinkedIn](https://www.linkedin.com/in/Netresh-Khanna) &nbsp;·&nbsp; [GitHub](https://github.com/netreshkhanna09)
+
+</div>
